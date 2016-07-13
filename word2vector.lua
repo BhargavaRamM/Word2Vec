@@ -188,3 +188,16 @@ function similar_words(w,k)
 	end
 	return res
 end
+
+function print_similar_words(words,k)
+	for i = 1, #words do
+		res = similar_words(words[i],k)
+		if res ~= nil then
+			print("----"..words[i].."----")
+			for j = 1,k do
+				print(string.format("%s, %.4f", res[j][1],res[j][2]))
+			end
+		end
+	end
+end
+
