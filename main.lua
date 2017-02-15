@@ -2,7 +2,7 @@ require ("io")
 require ("os")
 require ("paths")
 require ("torch")
-require ("word2vec.lua")
+require ("word2vector")
 
 config = {}
 config.corpus = "corpus.txt" -- input data
@@ -42,11 +42,14 @@ for i,j in pairs(config) do
 end
 
 m = word2vec(config)
-m:build_vocab(config.corpus)
-m:build_table()
+m:wordFrequency(config.corpus)
+--m:build_table()
+m:trimVocab()
+m.lr = config.lr
+m:word_table()
 
-for k = 1, config.epochs do
-	m.lr = config.lr
-	m:train_model(config.corpus)
-end
-m:print_sim_words({"the","he","can"}, 5)
+--for k = 1, config.epochs do
+--	m.lr = config.lr
+--	m:train_model(config.corpus)
+--end
+--m:print_sim_words({"the","he","can"}, 5)
