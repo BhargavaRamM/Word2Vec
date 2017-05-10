@@ -4,7 +4,6 @@ require "torch"
 
 local Word2Vec = torch.class("word2vec")
 
-
 --total_count = 0
 --vocab = {}
 --word = torch.IntTensor(1)
@@ -39,10 +38,6 @@ function word2vec:__init(config)
     self.total_count = 0
 end
 
-
-
-
-
 function word2vec:wordFrequency(corpus)
 	-- Get the word frequency in the corpus. 
 	-- Build vocab
@@ -59,9 +54,9 @@ function word2vec:wordFrequency(corpus)
 		end
 	end
 	f.close()
-	for key,val in pairs(self.vocab) do
-		print(key..":"..val)
-	end
+--	for key,val in pairs(self.vocab) do
+--		print(key..":"..val)
+--	end
 end
 
 -- index2word is termIndex
@@ -91,9 +86,10 @@ function word2vec:seperateLine(inputLine)
 	return words
 end
 
-function word2vec:build_model()
-	self.wordVectors = nn.LookupTable(self.vocab_size,self.dimensions)
-	self.contextVectors = nn.LookupTable(self.vocab_size,self.dimensions)
+function word2vec:buildModel()
+    print (self.vocab_size.." << "..self.dim)
+	self.wordVectors = nn.LookupTable(self.vocab_size,self.dim)
+	self.contextVectors = nn.LookupTable(self.vocab_size,self.dim)
 	self.wordVectors:reset(0.2)
 	self.contextVectors:reset(0.2)
 	self.mlp = nn.Sequential()
@@ -101,49 +97,60 @@ function word2vec:build_model()
 	self.mlp.modules[1]:add(self.wordVectors)
 	self.mlp.modules[1]:add(self.contextVectors)
 	self.mlp:add(nn.MM(false,true))
-	self.mlp:add(Sigmoid())
+	self.mlp:add(nn.Sigmoid())
+    print ("Model built")
 end
 
 function word2vec:decay_rate(min_lr, learning_rate,window)
-	decay = (self.min_lr-self.learning_rate)/(self.total_count*self.window)
+    local decay = 0
+	decay = (self.min_lr-self.lr)/(self.total_count*self.window)
+    return decay
 end
 
-function word2vec:word_table() 
-	local start_time = sys.clock()
-	local total_count = 0
-	for _,count in pairs(self.vocab) do
-		total_count = total_count + count^self.alpha
-	end
-	print("Total Count: "..total_count)
+function word2vec:getTotalWeightOfWordProbs()
+    local total_count = 0
+    for _, count in pairs(self.vocab) do
+--        print (total_count.." -- "..count.."--"..self.alpha)
+        total_count = total_count + count^self.alpha
+    end
+    return total_count
+end
 
+function word2vec:wordTable()
+	local start_time = sys.clock()
+    total_count = self:getTotalWeightOfWordProbs()
+	print("Total Count: "..total_count)
 	self.table = torch.IntTensor(self.table_size)
 	local word_idx = 1
+--  insert each word index into table
 	local word_prob = self.vocab[self.termIndex[word_idx]]^self.alpha/total_count
 	for i = 1, self.table_size do
 		self.table[i] = word_idx
 		if i/self.table_size > word_prob then
 			word_idx = word_idx + 1
 			word_prob = word_prob + self.vocab[self.termIndex[word_idx]]^self.alpha/total_count
-			-- word_prob = word_prob + self.vocab[self.termIndex[self.word_idx]]^self.alpha/total_count
+--            print (word_idx.." -- "..word_prob)
 		end
-		if word_idx > self.vocab_size then 
+		if word_idx > self.vocab_size then
 			word_idx = word_idx - 1
 		end
-	end
-
+    end
 	print(string.format("A word table is built in %.2f secs", sys.clock()-start_time))
 end
 
 -- lr is the learning_rate
 -- mlp is w2v 
 -- x is p and bp is dl_dp
-function  word2vec:train(word, contexts) 
+function  word2vec:train(word, contexts)
+    if self.gpu == 1 then
+        self:cuda()
+    end
 	local x = self.mlp:forward({contexts,word})
 	local loss = self.criterion:forward(x,self.labels)
 	local bp = self.criterion:backward(x,self.labels)
 	self.mlp:zeroGradParameters()
 	self.mlp:backward({contexts,word},bp)
-	self.mlp:updateParameters(self.learning_rate)
+	self.mlp:updateParameters(self.lr)
 end
 
 function word2vec:sample_contexts(context) 
@@ -158,37 +165,39 @@ function word2vec:sample_contexts(context)
 	end
 end
 
-function word2vec:train_corpus(corpus) 
-	local start_time = sys.clock()
-	local count = 0
-	fileName = io.open(corpus,"r")
-	for line in fileName:lines() do
-		sentence = self.seperateLine(line)
-		for i, word in ipairs(sentence) do
-			word_index = self.terms[word]
-			if word_index ~= nil then
-				local win = torch.random(self.window)
-				self.word[1] = word_index
-				for j = i-win, i+win do
-					local context = sentence[j]
-					if context ~=nil and j~=i then
-						context_index = self.terms[context]
-						if context_index ~= nil then
-							self.sample_contexts(context_index)
-							self.train(self.word,self.contexts)
-							count = count+1
-							local decay = self.decay_rate(self.min_lr,learning_rate,window) 
-							self.learning_rate = math.max(self.min_lr,self,learning_rate+decay)
-							if count%100000 == 0 then 
-								print(string.format("%d words trained in %.2f secs",count, sys.clock()-start_time))
-							end
-						end
-					end
-				end
-			end
-		end
-	end
-	print(string.format("%d words processed in %0.2f secs", count, sys.clock()-start_time))
+function word2vec:trainModel(corpus)
+    local start_time = sys.clock()
+    local count = 0
+    fileName = io.open(corpus,"r")
+    for line in fileName:lines() do
+--        print (line)
+        sentence = self:seperateLine(line)
+        for i, word in ipairs(sentence) do
+            word_index = self.terms[word]
+            if word_index ~= nil then
+                local win = torch.random(self.window)
+                self.word[1] = word_index
+                for j = i-win, i+win do
+                    local context = sentence[j]
+                    if context ~=nil and j~=i then
+                        context_index = self.terms[context]
+                        if context_index ~= nil then
+                            self:sample_contexts(context_index)
+                            self:train(self.word,self.contexts)
+                            count = count+1
+                            local decay = self:decay_rate(self.min_lr,self.lr,win)
+                            self.lr = math.max(self.min_lr,self.lr+decay)
+                            if count%100000 == 0 then
+                                print(string.format("%d words trained in %.2f secs",count, sys.clock()-start_time))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    print(string.format("%d words processed in %0.2f secs", count, sys.clock()-start_time))
+    torch.save("model",self.mlp)
 end
 
 function word2vec:normalize(m)

@@ -15,7 +15,7 @@ config.minfreq = 10
 config.lr = 0.025
 config.min_lr = 0.001
 config.epochs = 3
-config.gpu = 0 -- 0 = use cpu and 1 = use gpu
+config.gpu = 1 -- 0 = use cpu and 1 = use gpu
 config.stream = 1 -- 1 = stream from hard drive 0 = copy into memory
 
 --parse input arguments
@@ -46,10 +46,16 @@ m:wordFrequency(config.corpus)
 --m:build_table()
 m:trimVocab()
 m.lr = config.lr
-m:word_table()
+m:wordTable()
+m:buildModel()
+for k=1, config.epochs do
+	m.lr = config.min_lr
+	m:trainModel(config.corpus)
+end
+
 
 --for k = 1, config.epochs do
 --	m.lr = config.lr
 --	m:train_model(config.corpus)
 --end
---m:print_sim_words({"the","he","can"}, 5)
+m:print_sim_words({"the","he","can"}, 5)
