@@ -197,7 +197,7 @@ function word2vec:trainModel(corpus)
         end
     end
     print(string.format("%d words processed in %0.2f secs", count, sys.clock()-start_time))
-    torch.save("model",self.mlp)
+    torch.save("model.t7",self.mlp)
 end
 
 function word2vec:normalize(m)
@@ -229,7 +229,6 @@ function word2vec:similar_words(w,k)
 			return nil
 		else
 			w = self.normalized_wordVectors[self.terms[w]]
-
 		end
 	end
 	local similarity = torch.mv(self.normalized_wordVectors,w)
